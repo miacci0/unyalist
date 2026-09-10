@@ -139,8 +139,7 @@ export default function InquiryList() {
                 <th>案件名</th>
                 <th>希望納期</th>
                 <th>単価</th>
-                <th>ステータス</th>
-                <th></th>
+                <th className="col-status-actions">ステータス</th>
               </tr>
             </thead>
             <tbody>
@@ -170,10 +169,8 @@ export default function InquiryList() {
                     <td className="col-project">{inq.projectName || "—"}</td>
                     <td className="col-deadline muted-small">{inq.expectedDeadline || "—"}</td>
                     <td className="col-rate muted-small">{inq.expectedRate || "—"}</td>
-                    <td className="col-status">
+                    <td className="col-status-actions">
                       <span className={`status-badge status-${inq.status}`}>{inq.status}</span>
-                    </td>
-                    <td className="col-actions">
                       <div className="action-buttons">
                         {actions.map(a => (
                           <button
@@ -292,6 +289,7 @@ thead th {
   white-space: nowrap;
   border-bottom: 1px solid #E4E0D6;
 }
+tbody tr { background: #FBFAF6; }
 tbody td {
   padding: 10px 12px;
   border-bottom: 1px solid #EFECE3;
@@ -337,7 +335,20 @@ tbody tr:last-child td { border-bottom: none; }
 .status-badge.status-成立 { background: #DEEFD9; color: #2E6B2E; }
 .status-badge.status-不成立 { background: #F4E1DE; color: #8A3A2E; }
 .status-badge.status-非依頼 { background: #EFECE3; color: #9C978A; }
-.col-actions { min-width: 200px; }
+/* ステータス+操作は右端に固定表示し、横スクロールしなくても常に見えるようにする
+   (受信日時〜単価までの詳細列だけが .table-scroll の中でスクロールする)。 */
+.col-status-actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  width: 210px;
+  min-width: 210px;
+  box-shadow: -6px 0 6px -6px rgba(33, 31, 26, 0.18);
+}
+th.col-status-actions { background: #F1EEE5; z-index: 2; }
+td.col-status-actions { background: #FBFAF6; display: table-cell; }
+tbody tr:hover td.col-status-actions { background: #FBFAF6; }
+.col-status-actions .status-badge { display: block; width: fit-content; margin-bottom: 6px; }
 .action-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .action-btn {
   border: none;
