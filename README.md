@@ -102,6 +102,33 @@ curl -H "Authorization: Bearer <CRON_SECRETの値>" http://localhost:3004/api/cr
    コミットが無いと自動停止する点に注意。将来Vercel Proに上げた場合は`vercel.json`のcronに
    切り替えられる)
 
+## AI分類プロンプトの動作確認
+
+`lib/gemini.js`のプロンプトやresponseSchemaを変更した際は、実メールの受信やcron実行を介さず
+ローカルで即座に試せる。
+
+```bash
+npm run test:classify
+```
+
+件名→Enter、続けて本文を貼り付けて最後にCtrl+D(WindowsはCtrl+Z→Enter)を押すと、Gemini APIの
+生レスポンスとJSONパース結果が表示される。`GEMINI_API_KEY`は`.env.local`から読む。
+
+## 既知の不具合と復旧手順(2026年9月): AI分類の全件失敗
+
+`responseSchema`のnullable項目指定(`type: ["string","null"]`)がGemini APIの仕様(OpenAPI
+3.0サブセット、`nullable: true`が正しい書き方)に合っておらず、修正前は**内容に関わらず全メールで
+分類が失敗し「非依頼」扱いになっていた**(該当行の要約は`(AI分類に失敗しました)`)。この不具合は
+`lib/gemini.js`で修正済みだが、修正前に取り込まれてしまった行は`source_message_id`の重複防止
+ロジックにより自動では再取得されない。影響を受けた既存アプリでは、修正版デプロイ後に一度だけ
+Supabase SQL Editorで以下を実行して該当行を削除し、
+
+```sql
+delete from inquiries where summary like '%AI分類に失敗しました%';
+```
+
+各Gmailアカウントの「再取得」ボタン(必要な日数を指定)から取り込み直すこと。
+
 ## 既存の単一アカウント運用からの移行
 
 これまで`GOOGLE_REFRESH_TOKEN`環境変数で単一アカウントを接続していた場合、上記手順2の
