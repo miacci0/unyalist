@@ -42,10 +42,28 @@ function gmailLink(sourceMessageId) {
 export default function InquiryList() {
   const { loading, loadFailed, saveStatus, inquiries, updateStatus, refresh } = useInquiries();
   const [visibleStatuses, setVisibleStatuses] = useState(new Set(DEFAULT_VISIBLE_STATUSES));
+  // 複数Gmailアカウント対応: チップを外したアカウントだけを隠す方式にしておくと、
+  // 新しいアカウントを追加してもここを触らない限り自動的に表示対象になる(デフォルト全表示)。
+  const [hiddenAccounts, setHiddenAccounts] = useState(new Set());
+
+  const accountOptions = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const inq of inquiries) {
+      if (inq.mailboxEmail && !seen.has(inq.mailboxEmail)) {
+        seen.add(inq.mailboxEmail);
+        list.push(inq.mailboxEmail);
+      }
+    }
+    return list;
+  }, [inquiries]);
 
   const filtered = useMemo(
-    () => inquiries.filter(inq => visibleStatuses.has(inq.status)),
-    [inquiries, visibleStatuses]
+    () =>
+      inquiries.filter(
+        inq => visibleStatuses.has(inq.status) && !(inq.mailboxEmail && hiddenAccounts.has(inq.mailboxEmail))
+      ),
+    [inquiries, visibleStatuses, hiddenAccounts]
   );
 
   function toggleStatus(s) {
@@ -53,6 +71,15 @@ export default function InquiryList() {
       const next = new Set(prev);
       if (next.has(s)) next.delete(s);
       else next.add(s);
+      return next;
+    });
+  }
+
+  function toggleAccount(email) {
+    setHiddenAccounts(prev => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email);
+      else next.add(email);
       return next;
     });
   }
@@ -80,6 +107,20 @@ export default function InquiryList() {
         </div>
       </div>
 
+      {accountOptions.length > 1 && (
+        <div className="filters account-filters">
+          {accountOptions.map(email => (
+            <button
+              key={email}
+              className={`filter-chip account-chip ${hiddenAccounts.has(email) ? "" : "active"}`}
+              onClick={() => toggleAccount(email)}
+            >
+              {email}
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading && <div className="empty-note">読み込み中…</div>}
       {loadFailed && <div className="empty-note error">読み込みに失敗しました。時間をおいて再読み込みしてください。</div>}
       {!loading && !loadFailed && filtered.length === 0 && (
@@ -92,6 +133,7 @@ export default function InquiryList() {
             <thead>
               <tr>
                 <th>受信日時</th>
+                <th>受信アカウント</th>
                 <th>送信者</th>
                 <th>件名 / 要約</th>
                 <th>案件名</th>
@@ -108,6 +150,9 @@ export default function InquiryList() {
                 return (
                   <tr key={inq.id}>
                     <td className="col-date">{formatDateTime(inq.receivedAt)}</td>
+                    <td className="col-account">
+                      {inq.mailboxEmail ? <span className="account-badge">{inq.mailboxEmail}</span> : "—"}
+                    </td>
                     <td className="col-sender">
                       <div>{inq.senderName || "(不明)"}</div>
                       <div className="muted-small">{inq.senderEmail}</div>
@@ -200,6 +245,8 @@ const LIST_CSS = `
   border-color: #4C6C57;
   color: #FBFAF6;
 }
+.account-filters { margin: -4px 0 14px; }
+.account-chip.active { background: #5A6E8C; border-color: #5A6E8C; }
 .toolbar-right {
   display: flex;
   align-items: center;
@@ -252,6 +299,20 @@ tbody td {
 }
 tbody tr:last-child td { border-bottom: none; }
 .col-date { white-space: nowrap; color: #837E71; font-size: 12px; }
+.col-account { min-width: 130px; }
+.account-badge {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: #E7EBF2;
+  color: #3E4E68;
+}
 .col-sender { min-width: 140px; }
 .col-subject { min-width: 260px; }
 .col-subject a { color: #2F5D46; text-decoration: none; font-weight: 600; }

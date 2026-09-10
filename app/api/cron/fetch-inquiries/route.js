@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 import { resolveOwnerUserId } from "@/lib/ownerUser";
-import { listRecentMessageIds, getMessageDetail } from "@/lib/gmail";
+import { createGmailClient, listRecentMessageIds, getMessageDetail } from "@/lib/gmail";
+import { decryptRefreshToken } from "@/lib/gmailAccountAuth";
 import { classifyInquiry } from "@/lib/gemini";
 
 // GitHub Actionsのscheduled workflow(.github/workflows/poll-inquiries.yml)から
 // 数分〜十数分おきに呼ばれる「受信→AI判定→保存」パイプライン(指示書セクション4・5・6・9)。
+// オーナーに紐づく有効な(enabled=true)gmail_accountsを全件ループし、アカウントごとに
+// 自分のlast_checked_atをカーソルにして処理する(複数アカウント対応)。
 // Vercel HobbyプランはCron自体の実行頻度が1日1回に制限されるため、Vercel Cronではなく
 // GitHub Actions側からAuthorization: Bearer $CRON_SECRETを付けて叩く方式にしている
 // (将来Pro化した場合はvercel.jsonのcronからこのルートをそのまま流用できる)。
@@ -21,16 +24,6 @@ function isAuthorized(request) {
   return authHeader === `Bearer ${secret}`;
 }
 
-async function loadLastCheckedAt(admin, ownerId) {
-  const { data } = await admin
-    .from("inquiry_sync_state")
-    .select("last_checked_at")
-    .eq("user_id", ownerId)
-    .maybeSingle();
-  if (data?.last_checked_at) return new Date(data.last_checked_at);
-  return new Date(Date.now() - DEFAULT_LOOKBACK_HOURS * 60 * 60 * 1000);
-}
-
 async function findExistingMessageIds(admin, ownerId, messageIds) {
   if (messageIds.length === 0) return new Set();
   const { data, error } = await admin
@@ -42,43 +35,25 @@ async function findExistingMessageIds(admin, ownerId, messageIds) {
   return new Set((data || []).map(r => r.source_message_id));
 }
 
-export async function GET(request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const admin = createSupabaseAdminClient();
-  const threshold = Number(process.env.CONFIDENCE_THRESHOLD ?? 0.6);
-
-  let ownerId;
-  try {
-    ownerId = await resolveOwnerUserId(admin);
-  } catch (err) {
-    return NextResponse.json({ error: String(err?.message || err) }, { status: 500 });
-  }
-
-  const lastCheckedAt = await loadLastCheckedAt(admin, ownerId);
+async function processAccount(admin, ownerId, account, threshold) {
+  const lastCheckedAt = new Date(account.last_checked_at || Date.now() - DEFAULT_LOOKBACK_HOURS * 60 * 60 * 1000);
   const afterUnixSeconds = Math.floor(lastCheckedAt.getTime() / 1000);
   const runStartedAt = new Date();
 
-  let messageIds = [];
-  try {
-    messageIds = await listRecentMessageIds(afterUnixSeconds);
-  } catch (err) {
-    return NextResponse.json({ error: `Gmail取得に失敗しました: ${String(err?.message || err)}` }, { status: 500 });
-  }
+  const refreshToken = decryptRefreshToken(account.refresh_token_encrypted);
+  const gmail = createGmailClient(refreshToken);
 
+  const messageIds = await listRecentMessageIds(gmail, afterUnixSeconds);
   const existingIds = await findExistingMessageIds(admin, ownerId, messageIds);
   const newIds = messageIds.filter(id => !existingIds.has(id));
 
   let saved = 0;
-  let skippedExisting = existingIds.size;
   let failed = 0;
   const errors = [];
 
   for (const messageId of newIds) {
     try {
-      const detail = await getMessageDetail(messageId);
+      const detail = await getMessageDetail(gmail, messageId);
       let classification;
       try {
         classification = await classifyInquiry({
@@ -98,6 +73,8 @@ export async function GET(request) {
       const { error: insertError } = await admin.from("inquiries").upsert(
         {
           user_id: ownerId,
+          gmail_account_id: account.id,
+          mailbox_email: account.gmail_email,
           received_at: detail.receivedAt,
           sender_name: detail.senderName,
           sender_email: detail.senderEmail,
@@ -122,17 +99,54 @@ export async function GET(request) {
     }
   }
 
-  await admin
-    .from("inquiry_sync_state")
-    .upsert({ user_id: ownerId, last_checked_at: runStartedAt.toISOString() }, { onConflict: "user_id" });
+  await admin.from("gmail_accounts").update({ last_checked_at: runStartedAt.toISOString() }).eq("id", account.id);
 
-  return NextResponse.json({
-    ok: true,
+  return {
+    accountEmail: account.gmail_email,
     checkedAfter: lastCheckedAt.toISOString(),
     fetched: messageIds.length,
     saved,
-    skippedExisting,
+    skippedExisting: existingIds.size,
     failed,
     errors: errors.slice(0, 20),
-  });
+  };
+}
+
+export async function GET(request) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const admin = createSupabaseAdminClient();
+  const threshold = Number(process.env.CONFIDENCE_THRESHOLD ?? 0.6);
+
+  let ownerId;
+  try {
+    ownerId = await resolveOwnerUserId(admin);
+  } catch (err) {
+    return NextResponse.json({ error: String(err?.message || err) }, { status: 500 });
+  }
+
+  const { data: accounts, error: accountsError } = await admin
+    .from("gmail_accounts")
+    .select("id, gmail_email, refresh_token_encrypted, last_checked_at")
+    .eq("user_id", ownerId)
+    .eq("enabled", true);
+  if (accountsError) {
+    return NextResponse.json({ error: "gmail_accountsの取得に失敗しました" }, { status: 500 });
+  }
+  if (!accounts || accounts.length === 0) {
+    return NextResponse.json({ ok: true, accounts: [], note: "接続済みの有効なGmailアカウントがありません" });
+  }
+
+  const results = [];
+  for (const account of accounts) {
+    try {
+      results.push(await processAccount(admin, ownerId, account, threshold));
+    } catch (err) {
+      results.push({ accountEmail: account.gmail_email, error: String(err?.message || err) });
+    }
+  }
+
+  return NextResponse.json({ ok: true, accounts: results });
 }
