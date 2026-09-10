@@ -31,7 +31,7 @@ function loadEnvLocal() {
 }
 
 // --- 以下、lib/gemini.jsと同内容(理由は冒頭コメント参照) ---
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.6-flash";
 
 const SYSTEM_PROMPT = `あなたはアニメーター宛に届いたメールを判別するアシスタントです。
 このメールが「アニメーター個人への仕事依頼・仕事の打診(作画・作監・原画・動画・撮影・OP/ED制作などの
