@@ -1,0 +1,18 @@
+name: Poll inquiries
+
+# Vercel Hobbyプランはvercel.jsonのCronが1日1回までに制限されるため、代わりにここから
+# 数分〜十数分おきに /api/cron/fetch-inquiries を叩く。CRON_SECRET/UNYALIST_APP_URLは
+# このリポジトリのSettings > Secrets and variables > Actionsに登録しておくこと。
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call fetch-inquiries endpoint
+        run: |
+          curl -sf -X GET "${{ secrets.UNYALIST_APP_URL }}/api/cron/fetch-inquiries" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
