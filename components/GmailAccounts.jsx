@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { disconnectGmailAccount, listGmailAccounts, startGmailConnect, updateGmailAccount } from "@/lib/gmailAccountsApi";
+import {
+  disconnectGmailAccount,
+  listGmailAccounts,
+  startGmailConnect,
+  syncGmailAccount,
+  updateGmailAccount,
+} from "@/lib/gmailAccountsApi";
+
+const DEFAULT_REWIND_DAYS = 7;
+const MIN_REWIND_DAYS = 1;
+const MAX_REWIND_DAYS = 90;
 
 const ERROR_MESSAGES = {
   invalid_state: "認可の有効期限が切れたか、不正なリクエストでした。もう一度お試しください。",
@@ -25,6 +35,7 @@ export default function GmailAccounts() {
   const [notice, setNotice] = useState(null); // { type: "success" | "error", text }
   const [connecting, setConnecting] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [rewindDays, setRewindDays] = useState({}); // accountId -> 入力中の日数
 
   async function refresh() {
     setLoading(true);
@@ -94,6 +105,27 @@ export default function GmailAccounts() {
     }
   }
 
+  async function handleRewindAndSync(account) {
+    const days = Math.min(MAX_REWIND_DAYS, Math.max(MIN_REWIND_DAYS, Number(rewindDays[account.id]) || DEFAULT_REWIND_DAYS));
+    setBusyId(account.id);
+    try {
+      await updateGmailAccount(account.id, { rewindDays: days });
+      const result = await syncGmailAccount(account.id);
+      await refresh();
+      if (result) {
+        const remainingNote = result.remaining > 0 ? `(残り${result.remaining}件は次回以降に処理されます)` : "";
+        setNotice({
+          type: "success",
+          text: `${account.label || account.email}: 過去${days}日分から${result.saved}件を取得しました${remainingNote}`,
+        });
+      }
+    } catch (err) {
+      setNotice({ type: "error", text: err.message || "再取得に失敗しました" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleDisconnect(account) {
     const ok = window.confirm(
       `${account.label || account.email} との連携を解除しますか?\n今後このアカウントの新着メールは取り込まれなくなります(過去に取得済みの案件は残ります)。`
@@ -145,6 +177,24 @@ export default function GmailAccounts() {
                 <span className="account-meta">最終取得: {formatDateTime(account.lastCheckedAt)}</span>
               </div>
               <div className="account-actions">
+                <div className="rewind-group">
+                  <input
+                    type="number"
+                    className="rewind-input"
+                    min={MIN_REWIND_DAYS}
+                    max={MAX_REWIND_DAYS}
+                    value={rewindDays[account.id] ?? DEFAULT_REWIND_DAYS}
+                    onChange={e => setRewindDays(prev => ({ ...prev, [account.id]: e.target.value }))}
+                  />
+                  <span className="rewind-unit">日前まで</span>
+                  <button
+                    className="rewind-btn"
+                    disabled={busyId === account.id}
+                    onClick={() => handleRewindAndSync(account)}
+                  >
+                    {busyId === account.id ? "取得中…" : "再取得"}
+                  </button>
+                </div>
                 <button className="toggle-btn" disabled={busyId === account.id} onClick={() => handleToggle(account)}>
                   {account.enabled ? "一時停止" : "再開"}
                 </button>
@@ -257,7 +307,39 @@ const CSS = `
 }
 .account-email { font-size: 12px; color: #837E71; }
 .account-meta { font-size: 11.5px; color: #A39E90; }
-.account-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.account-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+.rewind-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #DAD5C8;
+  border-radius: 6px;
+  padding: 3px 6px 3px 8px;
+  background: #FFFFFF;
+}
+.rewind-input {
+  width: 40px;
+  border: none;
+  font-size: 12px;
+  font-family: inherit;
+  color: #211F1A;
+  text-align: right;
+}
+.rewind-input:focus { outline: none; }
+.rewind-unit { font-size: 11.5px; color: #837E71; white-space: nowrap; }
+.rewind-btn {
+  border: none;
+  background: #5A6E8C;
+  color: #FBFAF6;
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.rewind-btn:disabled { opacity: 0.6; cursor: default; }
 .toggle-btn, .disconnect-btn {
   border: 1px solid #DAD5C8;
   background: #FFFFFF;

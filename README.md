@@ -27,10 +27,13 @@ npm install
 
 ### 2. Supabaseスキーマの適用
 
-Animator Workspace / routine-appと同じSupabaseプロジェクトのSQL Editorで
-[`supabase/unyalist_schema.sql`](supabase/unyalist_schema.sql) を実行し、続けて複数Gmailアカウント
-対応のマイグレーション [`supabase/gmail_multi_account.sql`](supabase/gmail_multi_account.sql) も実行する
-(`gmail_accounts`テーブルを追加し、旧`inquiry_sync_state`テーブルを置き換える)。
+Animator Workspace / routine-appと同じSupabaseプロジェクトのSQL Editorで、以下の順に実行する。
+
+1. [`supabase/unyalist_schema.sql`](supabase/unyalist_schema.sql)
+2. [`supabase/gmail_multi_account.sql`](supabase/gmail_multi_account.sql)
+   (`gmail_accounts`テーブルを追加し、旧`inquiry_sync_state`テーブルを置き換える)
+3. [`supabase/gmail_lookback_default.sql`](supabase/gmail_lookback_default.sql)
+   (新規接続時の初期取得範囲を24時間→7日間に変更)
 
 ### 3. Supabase側のリダイレクトURL登録
 
@@ -72,6 +75,12 @@ npm run dev -- -p 3004
 「+ Gmailアカウントを追加」ボタンから、案件管理の対象にしたい仕事用Googleアカウントで
 Google側の同意画面に進み、許可する。**複数ある場合はこのボタンをアカウントの数だけ繰り返す**
 (同じ画面に接続済みアカウントが一覧表示され、表示名の変更・一時停止・解除ができる)。
+
+新規接続直後は過去7日分のメールが自動的に取得対象になる。それより前まで遡りたい場合や、
+既に接続済みのアカウントをより過去まで遡って取り込み直したい場合は、各アカウント行の
+日数欄(1〜90日、デフォルト7)を書き換えて「再取得」を押す。押すとその場ですぐに同期が実行され、
+取得件数がトースト表示される(cronの次回実行=最大15分を待つ必要はない)。一度に処理しきれない
+ほど件数が多い場合は自動的に複数回に分けて処理されるため、時間をおいてもう一度押せば続きが処理される。
 
 ### 7. cronパイプラインの手動テスト
 
