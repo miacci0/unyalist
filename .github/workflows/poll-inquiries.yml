@@ -14,5 +14,17 @@ jobs:
     steps:
       - name: Call fetch-inquiries endpoint
         run: |
-          curl -sf -X GET "${{ secrets.UNYALIST_APP_URL }}/api/cron/fetch-inquiries" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          # curl -f だけだとエラー時に本文(実際のエラー内容)が握りつぶされ、Actionsのログには
+          # "exit code 22" としか残らず原因が分からない。ステータスと本文を必ず両方出力してから
+          # 2xx以外ならジョブを失敗させる。
+          http_status=$(curl -sS -o /tmp/response.json -w "%{http_code}" -X GET \
+            "${{ secrets.UNYALIST_APP_URL }}/api/cron/fetch-inquiries" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          echo "HTTP status: $http_status"
+          echo "--- response body ---"
+          cat /tmp/response.json
+          echo ""
+          if [ "$http_status" -lt 200 ] || [ "$http_status" -ge 300 ]; then
+            echo "::error::fetch-inquiries returned HTTP $http_status"
+            exit 1
+          fi
