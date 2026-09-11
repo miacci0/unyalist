@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ALL_STATUSES, DEFAULT_VISIBLE_STATUSES, useInquiries } from "@/lib/useInquiries";
+import { consolidateThreads } from "@/lib/inquiriesApi";
 
 // 指示書セクション7の一覧UI。詳細画面への遷移を必須にせず、一覧上のボタンだけで
 // ステータス操作が完結するようにする。締切・単価は目立たせすぎない(Animator Workspaceの
@@ -45,6 +46,8 @@ export default function InquiryList() {
   // 複数Gmailアカウント対応: チップを外したアカウントだけを隠す方式にしておくと、
   // 新しいアカウントを追加してもここを触らない限り自動的に表示対象になる(デフォルト全表示)。
   const [hiddenAccounts, setHiddenAccounts] = useState(new Set());
+  const [consolidating, setConsolidating] = useState(false);
+  const [notice, setNotice] = useState(null); // { type: "success" | "error", text }
 
   const accountOptions = useMemo(() => {
     const seen = new Set();
@@ -84,6 +87,29 @@ export default function InquiryList() {
     });
   }
 
+  async function handleConsolidate() {
+    setConsolidating(true);
+    try {
+      const accounts = await consolidateThreads();
+      const threadsMerged = accounts.reduce((sum, a) => sum + (a.threadsMerged || 0), 0);
+      const rowsHidden = accounts.reduce((sum, a) => sum + (a.rowsHidden || 0), 0);
+      const remaining = accounts.reduce((sum, a) => sum + (a.remaining || 0), 0);
+      const remainingNote = remaining > 0 ? `(未処理が${remaining}件残っています。もう一度押すと続きを処理します)` : "";
+      setNotice({
+        type: "success",
+        text:
+          threadsMerged > 0
+            ? `${threadsMerged}件のスレッドで、${rowsHidden}件の重複行を統合しました${remainingNote}`
+            : `統合対象の重複行は見つかりませんでした${remainingNote}`,
+      });
+      await refresh();
+    } catch (err) {
+      setNotice({ type: "error", text: err.message || "統合に失敗しました" });
+    } finally {
+      setConsolidating(false);
+    }
+  }
+
   return (
     <div className="inquiry-list">
       <style dangerouslySetInnerHTML={{ __html: LIST_CSS }} />
@@ -103,9 +129,19 @@ export default function InquiryList() {
         <div className="toolbar-right">
           {saveStatus === "syncing" && <span className="sync-note">保存中…</span>}
           {saveStatus === "error" && <span className="sync-note error">保存に失敗しました</span>}
+          <button className="consolidate-btn" onClick={handleConsolidate} disabled={consolidating}>
+            {consolidating ? "統合中…" : "重複を統合"}
+          </button>
           <button className="refresh-btn" onClick={refresh}>更新</button>
         </div>
       </div>
+
+      {notice && (
+        <div className={`notice ${notice.type}`}>
+          {notice.text}
+          <button className="notice-close" onClick={() => setNotice(null)}>×</button>
+        </div>
+      )}
 
       {accountOptions.length > 1 && (
         <div className="filters account-filters">
@@ -252,7 +288,7 @@ const LIST_CSS = `
 }
 .sync-note { color: #837E71; }
 .sync-note.error { color: #B84A3E; }
-.refresh-btn {
+.refresh-btn, .consolidate-btn {
   border: 1px solid #DAD5C8;
   background: #FBFAF6;
   border-radius: 6px;
@@ -260,6 +296,27 @@ const LIST_CSS = `
   font-size: 12px;
   cursor: pointer;
   font-family: inherit;
+}
+.consolidate-btn:disabled { opacity: 0.6; cursor: default; }
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  margin-bottom: 12px;
+}
+.notice.success { background: #E4EEE8; color: #2F5D46; }
+.notice.error { background: #F4E1DE; color: #8A3A2E; }
+.notice-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: inherit;
+  line-height: 1;
 }
 .empty-note {
   padding: 32px 12px;
