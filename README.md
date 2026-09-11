@@ -34,6 +34,8 @@ Animator Workspace / routine-appと同じSupabaseプロジェクトのSQL Editor
    (`gmail_accounts`テーブルを追加し、旧`inquiry_sync_state`テーブルを置き換える)
 3. [`supabase/gmail_lookback_default.sql`](supabase/gmail_lookback_default.sql)
    (新規接続時の初期取得範囲を24時間→7日間に変更)
+4. [`supabase/inquiry_threading.sql`](supabase/inquiry_threading.sql)
+   (返信メールを元の依頼にまとめて取り込むためのカラム・RPCを追加)
 
 ### 3. Supabase側のリダイレクトURL登録
 
@@ -113,6 +115,14 @@ npm run test:classify
 
 件名→Enter、続けて本文を貼り付けて最後にCtrl+D(WindowsはCtrl+Z→Enter)を押すと、Gemini APIの
 生レスポンスとJSONパース結果が表示される。`GEMINI_API_KEY`は`.env.local`から読む。
+
+## 返信メールの扱い
+
+依頼メールへの返信(相手からの返信・自分から送った返信のどちらも)は、GmailのthreadIdを
+キーに元の依頼行へ紐付けられ、別の案件として新規保存されることはない(送信済みメールは
+そもそもポーリング対象から除外している)。一覧上に返信の内容自体は表示しないため、
+やり取りの詳細は件名リンクからGmailを開いて確認する。この判定は本機能を有効にした後に
+受信したメールにのみ適用され、既に別行として保存済みの過去の返信は自動では統合されない。
 
 ## AI分類が失敗した場合の挙動
 
