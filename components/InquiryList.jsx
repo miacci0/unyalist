@@ -14,6 +14,8 @@ const STATUS_ACTIONS = {
     { label: "違う", next: "非依頼", tone: "muted" },
   ],
   検討中: [{ label: "返信済みにする", next: "返信済み", tone: "primary" }],
+  // 返信済み/保留/成立の案件に新着返信が来ると自動でここに遷移する(lib/gmailSync.js参照)。
+  返信待ち: [{ label: "返信済みにする", next: "返信済み", tone: "primary" }],
   返信済み: [
     { label: "保留にする", next: "保留", tone: "muted" },
     { label: "成立にする", next: "成立", tone: "primary" },
@@ -387,6 +389,7 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .status-badge.status-未確認 { background: #FCEFD9; color: #8A5A15; }
 .status-badge.status-検討中 { background: #E4EEE8; color: #2F5D46; }
+.status-badge.status-返信待ち { background: #FBE2D5; color: #8A4A1E; }
 .status-badge.status-返信済み { background: #E2E9F4; color: #2E4A80; }
 .status-badge.status-保留 { background: #EFECE3; color: #6B6656; }
 .status-badge.status-成立 { background: #DEEFD9; color: #2E6B2E; }
