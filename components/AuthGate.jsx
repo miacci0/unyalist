@@ -56,8 +56,10 @@ export default function AuthGate({ children }) {
         <div className="auth-card">
           <div className="auth-mark">📬</div>
           <h1>UnyaList</h1>
+          <p className="auth-desc">仕事依頼メールの一覧管理ツール。Gmailを読み取り専用で参照し、依頼の検出・整理を行います。</p>
           <p>Googleアカウントでログインしてください</p>
           <button onClick={signIn}>Googleでログイン</button>
+          <a className="auth-policy-link" href="/privacy">プライバシーポリシー</a>
         </div>
       </div>
     );
@@ -68,6 +70,7 @@ export default function AuthGate({ children }) {
       <style dangerouslySetInnerHTML={{ __html: AUTH_CSS }} />
       <div className="auth-topbar">
         <span className="auth-topbar-title">UnyaList</span>
+        <a className="auth-policy-link" href="/privacy">プライバシーポリシー</a>
         <span>{session.user.email}</span>
         <button onClick={signOut}>ログアウト</button>
       </div>
@@ -115,6 +118,17 @@ const AUTH_CSS = `
   font-size: 13px;
   color: #837E71;
 }
+.auth-card .auth-desc {
+  max-width: 340px;
+  line-height: 1.7;
+}
+.auth-policy-link {
+  font-size: 12px;
+  color: #837E71;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-policy-link:hover { color: #211F1A; }
 .auth-card button {
   margin-top: 6px;
   background: #4C6C57;
