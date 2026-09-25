@@ -14,7 +14,7 @@ export async function POST(request) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("gmail_accounts")
-    .select("id, label, gmail_email, enabled, last_checked_at, created_at")
+    .select("id, label, gmail_email, enabled, last_checked_at, created_at, last_error, last_error_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
   if (error) {
@@ -29,6 +29,8 @@ export async function POST(request) {
       enabled: row.enabled,
       lastCheckedAt: row.last_checked_at,
       connectedAt: row.created_at,
+      lastError: row.last_error,
+      lastErrorAt: row.last_error_at,
     })),
   });
 }

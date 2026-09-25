@@ -23,7 +23,7 @@ export async function POST(request) {
 
   let query = admin
     .from("gmail_accounts")
-    .select("id, gmail_email, refresh_token_encrypted, last_checked_at")
+    .select("id, gmail_email, refresh_token_encrypted, last_checked_at, last_error")
     .eq("user_id", userId)
     .eq("enabled", true);
   if (typeof body.accountId === "string" && body.accountId) {

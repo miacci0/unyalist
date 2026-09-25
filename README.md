@@ -40,6 +40,8 @@ Animator Workspace / routine-appと同じSupabaseプロジェクトのSQL Editor
    (既存の重複行を統合する「重複を統合」ボタン用のカラムを追加)
 6. [`supabase/inquiry_waiting_reply_status.sql`](supabase/inquiry_waiting_reply_status.sql)
    (「返信待ち」ステータスの追加)
+7. [`supabase/gmail_account_sync_status.sql`](supabase/gmail_account_sync_status.sql)
+   (アカウントごとの同期エラー`last_error`の保存。**コードのデプロイより先に実行すること**)
 
 ### 3. Supabase側のリダイレクトURL登録
 
@@ -50,10 +52,13 @@ Supabaseダッシュボード → Authentication → URL Configuration → Redir
 ### 4. Google Cloud ConsoleでGmail OAuthクライアントを作成
 
 1. 新規(または既存の)Google Cloudプロジェクトで **Gmail API** を有効化する
-2. OAuth同意画面を設定する(External)。**「テスト」ステータスのままの場合、追加したい
-   仕事用Googleアカウントをすべてテストユーザーとして登録する**(登録していないアカウントは
-   同意画面でエラーになる)。またテストステータスのrefresh tokenは**7日で失効する**制約があるため、
-   頻繁に接続が切れて困るようであれば本番公開への切り替えも検討する
+2. OAuth同意画面を設定する(External)。**公開ステータスは必ず「本番環境」にする(「アプリを公開」)。**
+   「テスト」のままだとGoogleがrefresh tokenを**7日で失効**させ、接続後ちょうど1週間で
+   全アカウントの同期が止まる(実際に発生した: 最新メールが一覧に出なくなる)。`gmail.readonly`は
+   制限付きスコープのため未検証アプリの警告が出るが、個人利用(100ユーザー上限内)なら
+   「詳細」→「安全ではないページに移動」で進めてよい。**公開してから**Gmailアカウントを接続する
+   (先に接続すると、そのtokenはテスト扱いで7日で失効する)。なお、やむを得ず「テスト」のまま
+   使う場合は、追加する仕事用Googleアカウントを全てテストユーザーに登録し、7日ごとに再接続すること
 3. OAuthクライアントID(ウェブアプリケーション)を発行し、承認済みのリダイレクトURIに
    `http://localhost:3004/api/gmail/oauth/callback` と本番デプロイURLの同パスを追加する
 4. `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` を控える(すべてのGmailアカウントで共通のOAuth
@@ -138,6 +143,18 @@ npm run test:classify
 「返信済み」「保留」「成立」の案件に新着の返信が届いた場合は、ステータスが自動的に
 「返信待ち」に変わる(未確認・検討中と同じくデフォルト表示に含まれる)。もう対応不要と
 思っていた案件に動きがあったことに気づけるようにするための仕組み。
+
+## Gmail同期が止まった場合(最新メールが一覧に出ない)
+
+アカウント一覧の該当行に赤い「⚠ 同期に失敗しています」と**「再接続」**ボタンが出る。
+`invalid_grant`(Googleの認可が失効)の場合は、そのボタンから再接続すれば直る(`last_checked_at`は
+保持されるため、止まっていた期間のメールも自動で追いかけて取り込まれる。急ぐ場合は各アカウントの
+「再取得」を数回押す)。繰り返す場合はOAuth同意画面が「テスト」のままになっていないか確認する
+(上記手順4-2)。
+
+同期がアカウント単位で失敗すると、`/api/cron/fetch-inquiries`はHTTP 500を返し、GitHub Actionsの
+`Poll inquiries`も失敗になる(以前はHTTP 200のままで、認可が失効しても「成功」と表示され続けていた)。
+ログにはステータスと本文(アカウントごとのエラー内容)が出力される。
 
 ## AI分類が失敗した場合の挙動
 

@@ -38,7 +38,7 @@ export async function GET(request) {
 
   const { data: accounts, error: accountsError } = await admin
     .from("gmail_accounts")
-    .select("id, gmail_email, refresh_token_encrypted, last_checked_at")
+    .select("id, gmail_email, refresh_token_encrypted, last_checked_at, last_error")
     .eq("user_id", ownerId)
     .eq("enabled", true);
   if (accountsError) {
@@ -49,5 +49,10 @@ export async function GET(request) {
   }
 
   const results = await syncAccounts(admin, ownerId, accounts, threshold);
-  return NextResponse.json({ ok: true, accounts: results });
+  // いずれかのアカウントが同期自体に失敗した場合(Google認可の失効など)はHTTP 500を返す。
+  // 以前は本文にエラーを入れたままHTTP 200を返していたため、GitHub Actionsが「成功」のまま
+  // 8日間同期が止まっていても誰も気づけなかった。本文はそのまま返すので、Actionsのログ
+  // (poll-inquiries.ymlがステータスと本文を出力する)から原因が分かる。
+  const hasAccountError = results.some(r => r.error);
+  return NextResponse.json({ ok: !hasAccountError, accounts: results }, { status: hasAccountError ? 500 : 200 });
 }

@@ -69,6 +69,9 @@ export async function GET(request) {
         label: existing?.label || gmailEmail,
         refresh_token_encrypted: refreshTokenEncrypted,
         enabled: true,
+        // 再接続に成功したので、失効などによる過去の同期エラー表示はここで消す。
+        last_error: null,
+        last_error_at: null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,gmail_email" }

@@ -112,7 +112,10 @@ export default function GmailAccounts() {
       await updateGmailAccount(account.id, { rewindDays: days });
       const result = await syncGmailAccount(account.id);
       await refresh();
-      if (result) {
+      if (result?.error) {
+        // 同期そのものが失敗したアカウント(Google認可の失効など)。以前は「undefined件」と表示していた。
+        setNotice({ type: "error", text: `${account.label || account.email}: ${result.error}` });
+      } else if (result) {
         const remainingNote = result.remaining > 0 ? `(残り${result.remaining}件は次回以降に処理されます)` : "";
         setNotice({
           type: "success",
@@ -202,6 +205,17 @@ export default function GmailAccounts() {
                   解除
                 </button>
               </div>
+              {account.lastError && (
+                <div className="account-error">
+                  <span>
+                    ⚠ 同期に失敗しています: {account.lastError}
+                    {account.lastErrorAt ? `(${formatDateTime(account.lastErrorAt)})` : ""}
+                  </span>
+                  <button className="reconnect-btn" onClick={handleConnect} disabled={connecting}>
+                    再接続
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -275,8 +289,34 @@ const CSS = `
   border-radius: 10px;
   overflow: hidden;
 }
+.account-error {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #F4E1DE;
+  color: #8A3A2E;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.reconnect-btn {
+  flex-shrink: 0;
+  border: none;
+  background: #8A3A2E;
+  color: #FBFAF6;
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.reconnect-btn:disabled { opacity: 0.6; cursor: default; }
 .account-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
